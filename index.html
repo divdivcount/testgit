@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>동물연결하기 게임</title>
+</head>
+<body>
+    <canvas id="gameCanvas" width="600" height="400"></canvas>
+    <script>
+        // 게임 엔진 구현
+        function gameEngine() {
+            // 캔버스 및 설정
+            var canvas = document.getElementById('gameCanvas');
+            var context = canvas.getContext('2d');
+            var cellSize = 40;
+            var gridSize = 10;
+            var gridMargin = 20;
+            canvas.style.border = "1px solid black";
+
+            // 동물 그리기 함수
+            function drawAnimal(x, y, color) {
+                context.beginPath();
+                context.arc(x, y, cellSize / 2 - 5, 0, 2 * Math.PI, false);
+                context.fillStyle = color;
+                context.fill();
+                context.lineWidth = 2;
+                context.strokeStyle = "black";
+                context.stroke();
+            }
+
+            // 새 게임 초기화 함수
+            function newGame() {
+                // 동물 리스트 생성
+                var animals = [];
+                var availableColors = ["#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF", "#00FFFF"];
+                var numOfColors = availableColors.length;
+                for (var i = 0; i < gridSize * 2 / numOfColors; i++) {
+                    for (var j = 0; j < numOfColors; j++) {
+                        animals.push({
+                            color: availableColors[j],
+                            isMatched: false
+                        });
+                    }
+                }
+                // 동물 리스트 셔플
+                for (var i = animals.length - 1; i > 0; i--) {
+                    var j = Math.floor(Math.random() * (i + 1));
+                    var temp = animals[i];
+                    animals[i] = animals[j];
+                    animals[j] = temp;
+                }
+                // 그리드 배치
+                var grid = [];
+                for (var i = 0; i < gridSize; i++) {
+                    grid[i] = [];
+                    for (var j = 0; j < gridSize; j++) {
+                        var cell = {
+                            animal: null,
+                            x: j,
+                            y: i,
+                            isMatchPoint: false
+                        };
+                        if (i === 0 || i === gridSize - 1 || j === 0 || j === gridSize - 1) {
+                            cell.isMatchPoint = true;
+                        } else {
+                            var k = (i - 1) * (gridSize - 2) + j - 1;
+                            cell.animal = animals[k];
+                        }
+                        grid[i].push(cell);
+                    }
+                }
+                return grid;
+            }
+
+            // 그리드를 그리는 함수
+            function drawGrid(grid) {
+                for (var i = 0; i < gridSize; i++) {
+                    for (var j = 0; j < gridSize; j++) {
+                        var cell = grid[i][j];
+                        var x = j * cellSize + gridMargin;
+                        var y = i * cellSize + gridMargin;
+                        if (cell.isMatchPoint) {
+                            context.fillStyle = "#CCCCCC";
+                            context.fillRect(x, y, cellSize, cellSize);
+                        } else if (cell.animal) {
+                            drawAnimal(x + cellSize / 2, y + cellSize / 2, cell.animal.color);
+                        }
+                    }
+                }
+            }
+
+            // 게임 상태
+            var gameState = {
+                grid: newGame(),
+                selectedCells: [],
+                isPlay: false,
+                isFinish: false,
+                firstCell: null,
+                secondCell: null
+            };
+
+            // 게임 시작
+            gameState.isPlay = true;
+            drawGrid(gameState.grid);
+
+            // 셀 선택 함수
+            function selectCell(cell) {
+                if (!gameState.isPlay || cell.isMatchPoint || cell === gameState.firstCell) return;
+                if (cell.animal && !cell.animal.isMatched && gameState.selectedCells.indexOf(cell) === -1) {
+                    cell.isSelected = true;
+                    gameState.selectedCells.push(cell);
+                    if (gameState.selectedCells.length === 1) {
+                        gameState.firstCell = cell;
+                    } else if (gameState.selectedCells.length === 2) {
+                        gameState.secondCell = cell;
+                        // 셀 연결 검사
+                        if (gameState.firstCell.animal.color === gameState.secondCell.animal.color) {
+                            gameState.firstCell.animal.isMatched = true;
+                            gameState.secondCell.animal.isMatched = true;
+                            // 매치 포인트 체크
+                            for (var i = 0; i < gameState.grid.length; i++) {
+                                for (var j = 0; j < gameState.grid[i].length; j++) {
+                                    var cell = gameState.grid[i][j];
+                                    if (cell.animal && !cell.animal.isMatched) {
+                                        if (checkMatchPoint(gameState.firstCell, cell) && checkMatchPoint(gameState.secondCell, cell)) {
+                                            cell.isMatchPoint = true;
+                                        } else {
+                                            cell.isMatchPoint = false;
+                                        }
+                                    }
+                                }
+                            }
+                            gameState.firstCell = null;
+                            gameState.secondCell = null;
+                            gameState.selectedCells = [];
+                        } else {
+                            gameState.isPlay = false;
+                            window.setTimeout(function() {
+                                gameState.firstCell.isSelected = false;
+                                gameState.secondCell.isSelected = false;
+                                gameState.firstCell = null;
+                                gameState.secondCell = null;
+                                gameState.selectedCells = [];
+                                gameState.isPlay = true;
+                                drawGrid(gameState.grid);
+                            }, 500);
+                        }
+                    }
+                }
+            }
+
+            // 게임 클릭 핸들러
+            canvas.addEventListener('click', function(e) {
+                var x = e.clientX - canvas.offsetLeft - gridMargin;
+                var y = e.clientY - canvas.offsetTop - gridMargin;
+                if (x < 0 || y < 0 || x > gridSize * cellSize || y > gridSize * cellSize) return;
+                var row = Math.floor(y / cellSize);
+                var col = Math.floor(x / cellSize);
+                selectCell(gameState.grid[row][col]);
+                drawGrid(gameState.grid);
+                // 게임 종료 검사
+                var isFinish = true;
+                for (var i = 0; i < gameState.grid.length; i++) {
+                    for (var j = 0; j < gameState.grid[i].length; j++) {
+                        var cell = gameState.grid[i][j];
+                        if (cell.animal && !cell.animal.isMatched) {
+                            isFinish = false;
+                        }
+                    }
+                }
+                if (isFinish) {
+                    gameState.isFinish = true;
+                    gameState.isPlay = false;
+                    alert('축하합니다! 게임을 클리어했습니다.');
+                }
+            });
+
+            // 매치 포인트 검사 함수
+            function checkMatchPoint(c1, c2) {
+                if (c1.x === c2.x) {
+                    // 위아래 연결
+                    for (var i = Math.min(c1.y, c2.y) + 1; i < Math.max(c1.y, c2.y); i++) {
+                        var cell = gameState.grid[i][c1.x];
+                        if (cell.animal) {
+                            return false;
+                        }
+                    }
+                    return true;
+                } else if (c1.y === c2.y) {
+                    // 양옆 연결
+                    for (var j = Math.min(c1.x, c2.x) + 1; j < Math.max(c1.x, c2.x); j++) {
+                        var cell = gameState.grid[c1.y][j];
+                        if (cell.animal) {
+                            return false;
+                        }
+                    }
+                    return true;
+                } else {
+                    // 대각선 연결
+                    if (checkMatchPoint(c1, gameState.grid[c2.y][c1.x]) && checkMatchPoint(c2, gameState.grid[c1.y][c2.x])) {
+                        return true;
+                    }
+                    return false;
+                }
+            }
+        }
+        // 게임 시작
+        gameEngine();
+    </script>
+</body>
+</html>
